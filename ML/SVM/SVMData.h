@@ -55,8 +55,8 @@ public:
                 curr = delim + 1;
                 ++col_index;
                 if (*delim == '\n') {
-                    X.push_back(std::move(row));
                     C_ = row.size();
+                    X.push_back(std::move(row));
                     row = {};
                     col_index = 0;
                     target = 0.0f;
@@ -106,6 +106,28 @@ public:
             return std::ref(std::get<Samples>(X_)[row_index]);
         } else {
             return std::get<SubSamples>(X_)[row_index];
+        }
+    }
+
+    void scale() {
+        if (std::holds_alternative<SubSamples>(X_)) {
+            return;
+        }
+        std::vector<std::pair<float, float>> feature_bounds(C_, {std::numeric_limits<float>::max(),
+                                                                 std::numeric_limits<float>::lowest()});
+        auto& X = std::get<Samples>(X_);
+        for (std::size_t i = 0; i < n_; ++i) {
+            for (std::size_t c = 0; c < C_; ++c) {
+                feature_bounds[c].first = std::min(feature_bounds[c].first, X[i][c]);
+                feature_bounds[c].second = std::max(feature_bounds[c].second, X[i][c]);
+            }
+        }
+
+        for (std::size_t c = 0; c < C_; ++c) {
+            auto [fmin, fmax] = feature_bounds[c];
+            for (std::size_t i = 0; i < n_; ++i) {
+                X[i][c] = 1.0f - 2.0f * (fmax - X[i][c])/(fmax - fmin);
+            }
         }
     }
 
