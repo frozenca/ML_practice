@@ -22,6 +22,7 @@ public:
     std::vector<float> y_;
     std::size_t n_;
     std::size_t C_;
+    std::vector<std::pair<float, float>> feature_bounds_;
     friend class SVMModel;
 
     // full data construct
@@ -70,12 +71,17 @@ public:
             throw std::invalid_argument("Number of features of sample does not match");
         }
         X_ = std::move(X);
+        scale();
     }
 
-    SVMTrainData(Samples X, std::vector<float> y) : X_(std::move(X)), y_(std::move(y)), n_(y_.size()), C_(std::get<Samples>(X_)[0].size()) {}
+    SVMTrainData(Samples X, std::vector<float> y) : X_(std::move(X)), y_(std::move(y)), n_(y_.size()), C_(std::get<Samples>(X_)[0].size()) {
+        scale();
+    }
 
     // constructor for subsamples
-    SVMTrainData(SubSamples X, std::vector<float> y) : X_(std::move(X)), y_(std::move(y)), n_(y_.size()), C_(std::get<SubSamples>(X_)[0].get().size()) {}
+    SVMTrainData(SubSamples X, std::vector<float> y, std::vector<std::pair<float, float>> feature_bounds)
+    : X_(std::move(X)), y_(std::move(y)), n_(y_.size()), C_(std::get<SubSamples>(X_)[0].get().size()),
+    feature_bounds_(std::move(feature_bounds)) {}
 
     [[nodiscard]] Samples getX() const {
         if (std::holds_alternative<Samples>(X_)) {
@@ -109,22 +115,23 @@ public:
         }
     }
 
+private:
     void scale() {
         if (std::holds_alternative<SubSamples>(X_)) {
             return;
         }
-        std::vector<std::pair<float, float>> feature_bounds(C_, {std::numeric_limits<float>::max(),
-                                                                 std::numeric_limits<float>::lowest()});
+        feature_bounds_ = std::vector<std::pair<float, float>>(C_, {std::numeric_limits<float>::max(),
+              std::numeric_limits<float>::lowest()});
         auto& X = std::get<Samples>(X_);
         for (std::size_t i = 0; i < n_; ++i) {
             for (std::size_t c = 0; c < C_; ++c) {
-                feature_bounds[c].first = std::min(feature_bounds[c].first, X[i][c]);
-                feature_bounds[c].second = std::max(feature_bounds[c].second, X[i][c]);
+                feature_bounds_[c].first = std::min(feature_bounds_[c].first, X[i][c]);
+                feature_bounds_[c].second = std::max(feature_bounds_[c].second, X[i][c]);
             }
         }
 
         for (std::size_t c = 0; c < C_; ++c) {
-            auto [fmin, fmax] = feature_bounds[c];
+            auto [fmin, fmax] = feature_bounds_[c];
             for (std::size_t i = 0; i < n_; ++i) {
                 X[i][c] = 1.0f - 2.0f * (fmax - X[i][c])/(fmax - fmin);
             }

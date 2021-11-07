@@ -7,8 +7,7 @@
 namespace fc = frozenca;
 
 int main() {
-    std::shared_ptr<fc::Kernel> rbf = std::make_shared<fc::KernelRBF>();
-    std::unique_ptr<fc::SVMModel> sm = std::make_unique<fc::SVMCSVC>(rbf);
+    std::unique_ptr<fc::SVMModel> sm = std::make_unique<fc::SVMCSVC>(std::make_unique<fc::KernelRBF>());
 
     std::mt19937 gen(std::random_device{}());
 
@@ -37,17 +36,37 @@ int main() {
     }
     fc::SVMTrainData data(X, y);
     fc::SVMParams params;
+    params.shrinking = false;
     sm->fit(data, params);
 
-    std::vector<std::vector<float>> X_;
+    std::vector<std::vector<float>> X1;
 
     for (std::size_t i = 0; i < 10; ++i) {
         auto height = male_height(gen);
         auto weight = male_weight(gen);
-        X_.push_back({height, weight});
+        X1.push_back({height, weight});
     }
 
-    auto y_ = sm->predict(X_);
+    auto y1 = sm->predict(X1);
 
+    for (auto y_pred : y1) {
+        std::cout << y_pred << ' ';
+    }
+    std::cout << '\n';
+
+    std::vector<std::vector<float>> X2;
+
+    for (std::size_t i = 0; i < 10; ++i) {
+        auto height = female_height(gen);
+        auto weight = female_weight(gen);
+        X2.push_back({height, weight});
+    }
+
+    auto y2 = sm->predict(X2);
+
+    for (auto y_pred : y2) {
+        std::cout << y_pred << ' ';
+    }
+    std::cout << '\n';
 
 }

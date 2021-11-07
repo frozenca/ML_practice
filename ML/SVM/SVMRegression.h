@@ -8,7 +8,7 @@ namespace frozenca {
 
 class SVMTwoClass : public SVMModel {
 public:
-    SVMTwoClass(const std::shared_ptr<Kernel>& kernel) : SVMModel(kernel) {}
+    SVMTwoClass(std::unique_ptr<Kernel> kernel) : SVMModel(std::move(kernel)) {}
     virtual ~SVMTwoClass() = default;
     virtual void constructModel(const SVMTrainData& svm_data, const Solution& solution) final;
     [[nodiscard]] virtual float predict(const std::vector<float>& sample) const;
@@ -64,7 +64,7 @@ void SVMTwoClass::constructModel(const SVMTrainData& svm_data, const Solution& s
 
 class SVMOneClass final : public SVMTwoClass {
 public:
-    SVMOneClass(const std::shared_ptr<Kernel>& kernel) : SVMTwoClass(kernel) {}
+    SVMOneClass(std::unique_ptr<Kernel> kernel) : SVMTwoClass(std::move(kernel)) {}
 private:
     std::pair<Mat<float>, std::vector<float>> computeQs(std::size_t l, const std::vector<std::vector<float>>& X) const;
 public:
@@ -87,6 +87,7 @@ std::pair<Mat<float>, std::vector<float>> SVMOneClass::computeQs(std::size_t l,
 }
 
 void SVMOneClass::fit(const SVMTrainData& svm_data, const SVMParams& params) {
+    SVMModel::fit(svm_data, params);
     const std::size_t l = svm_data.n_;
     std::vector<float> alpha (l);
     int n = static_cast<int>(params.nu * l); // # of alpha's at upper bound
@@ -119,7 +120,7 @@ class SVMRegression : public SVMTwoClass {
 public:
     virtual ~SVMRegression() = default;
 protected:
-    SVMRegression(const std::shared_ptr<Kernel>& kernel) : SVMTwoClass(kernel) {}
+    SVMRegression(std::unique_ptr<Kernel> kernel) : SVMTwoClass(std::move(kernel)) {}
     std::pair<Mat<float>, std::vector<float>> computeQs(std::size_t l, const std::vector<std::vector<float>>& X) const final;
 };
 
@@ -139,11 +140,12 @@ std::pair<Mat<float>, std::vector<float>> SVMRegression::computeQs(std::size_t l
 
 class SVMEpsSVR final : public SVMRegression {
 public:
-    SVMEpsSVR(const std::shared_ptr<Kernel>& kernel) : SVMRegression(kernel) {}
+    SVMEpsSVR(std::unique_ptr<Kernel> kernel) : SVMRegression(std::move(kernel)) {}
     void fit(const SVMTrainData& svm_data, const SVMParams& params);
 };
 
 void SVMEpsSVR::fit(const SVMTrainData& svm_data, const SVMParams& params) {
+    SVMModel::fit(svm_data, params);
     const std::size_t l = svm_data.n_;
     const std::size_t two_l = 2 * l;
     std::vector<float> alpha2 (two_l);
@@ -172,11 +174,12 @@ void SVMEpsSVR::fit(const SVMTrainData& svm_data, const SVMParams& params) {
 
 class SVMNuSVR final : public SVMRegression {
 public:
-    SVMNuSVR(const std::shared_ptr<Kernel>& kernel) : SVMRegression(kernel) {}
+    SVMNuSVR(std::unique_ptr<Kernel> kernel) : SVMRegression(std::move(kernel)) {}
     void fit(const SVMTrainData& svm_data, const SVMParams& params);
 };
 
 void SVMNuSVR::fit(const SVMTrainData& svm_data, const SVMParams& params) {
+    SVMModel::fit(svm_data, params);
     const std::size_t l = svm_data.n_;
     const std::size_t two_l = 2 * l;
     std::vector<float> alpha2 (two_l);

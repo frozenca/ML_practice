@@ -15,7 +15,6 @@
 namespace frozenca {
 
 struct SVMParams {
-    std::shared_ptr<Kernel> kernel_;
     float C = 1.0f;
     float nu = 0.5f;
     float p = 0.1f;
@@ -35,18 +34,22 @@ protected:
     // constants in decision functions (size: k * (k - 1) / 2)
     std::vector<float> rho_;
 
+    std::vector<std::pair<float, float>> feature_bounds_;
+
     std::vector<float> prob_A_;
     std::vector<float> prob_B_;
 
 public:
-    std::shared_ptr<Kernel> kernel_ = nullptr;
+    std::unique_ptr<Kernel> kernel_ = nullptr;
     friend class SVMTwoClass;
 
-    SVMModel(std::shared_ptr<Kernel> kernel) : kernel_(std::move(kernel)) {}
+    SVMModel(std::unique_ptr<Kernel> kernel) : kernel_(std::move(kernel)) {}
     virtual ~SVMModel() = default;
 
-    virtual void fit(const SVMTrainData& svm_data, const SVMParams& params) = 0;
+    virtual void fit(const SVMTrainData& svm_data, const SVMParams& params);
     virtual std::vector<float> crossValidate(const SVMTrainData& svm_data, const SVMParams& params, std::size_t count_fold) final;
+
+    virtual std::vector<float> scaleInputs(const std::vector<float>& sample) const final;
 
     [[nodiscard]] virtual float predict(const std::vector<float>& sample) const = 0;
     [[nodiscard]] virtual std::vector<float> predict(const std::vector<std::vector<float>>& samples) const final {
@@ -56,8 +59,21 @@ public:
         }
         return results;
     }
-
 };
+
+void SVMModel::fit(const SVMTrainData& svm_data, const SVMParams& params) {
+    feature_bounds_ = svm_data.feature_bounds_;
+    kernel_->adjustParams(svm_data.C_);
+}
+
+std::vector<float> SVMModel::scaleInputs(const std::vector<float>& sample) const {
+    auto sample_scaled = sample;
+    for (std::size_t c = 0; c < feature_bounds_.size(); ++c) {
+        auto [fmin, fmax] = feature_bounds_[c];
+        sample_scaled[c] = 1.0f - 2.0f * (fmax - sample[c])/(fmax - fmin);
+    }
+    return sample_scaled;
+}
 
 std::vector<float> SVMModel::crossValidate(const SVMTrainData& svm_data, const SVMParams& params, std::size_t count_fold) {
     const std::size_t l = svm_data.n_;
@@ -95,7 +111,7 @@ std::vector<float> SVMModel::crossValidate(const SVMTrainData& svm_data, const S
             }
         }
 
-        SVMTrainData CV_data_ffold (X_without_f, y_without_f);
+        SVMTrainData CV_data_ffold (X_without_f, y_without_f, svm_data.feature_bounds_);
         fit(CV_data_ffold, params);
         auto& fold_f = fold_sets[f];
         for (auto f_sample : fold_f) {

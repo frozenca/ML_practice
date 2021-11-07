@@ -18,7 +18,7 @@ private:
     std::vector<int> data_label_;
     std::vector<int> labels_;
 public:
-    SVMClassification(const std::shared_ptr<Kernel>& kernel) : SVMModel(kernel) {}
+    SVMClassification(std::unique_ptr<Kernel> kernel) : SVMModel(std::move(std::move(kernel))) {}
     virtual ~SVMClassification() = default;
     virtual void fit(const SVMTrainData& svm_data, const SVMParams& params) final;
     virtual void constructGroups(const SVMTrainData& svm_data) final;
@@ -32,6 +32,7 @@ protected:
 };
 
 void SVMClassification::fit(const SVMTrainData& svm_data, const SVMParams& params) {
+    SVMModel::fit(svm_data, params);
     constructGroups(svm_data);
     const std::size_t l = svm_data.n_;
     const std::size_t k = groups_.size();
@@ -65,7 +66,7 @@ void SVMClassification::fit(const SVMTrainData& svm_data, const SVMParams& param
             for (std::size_t cj = 0; cj < class_X[j].size(); ++cj) {
                 label_ij.push_back(-1);
             }
-            SVMTrainData sub_data(sample_ij, label_ij);
+            SVMTrainData sub_data(sample_ij, label_ij, svm_data.feature_bounds_);
             auto wi = params.weight_scale.empty() ? 1.0f : params.weight_scale[i];
             auto wj = params.weight_scale.empty() ? 1.0f : params.weight_scale[j];
             auto f = fitOne(sub_data, params, params.C * wi, params.C * wj);
@@ -121,7 +122,7 @@ void SVMClassification::constructModel(const SVMTrainData& svm_data,
     for (std::size_t i = 0; i < k; ++i) {
         for (auto idx : groups_[labels_[i]]) {
             if (nonzero_[idx]) {
-                SV_[i].push_back(svm_data.getX(i));
+                SV_[i].push_back(svm_data.getX(idx));
             }
         }
     }
@@ -164,6 +165,7 @@ std::pair<Mat<float>, std::vector<float>> SVMClassification::computeQs(std::size
 }
 
 float SVMClassification::predict(const std::vector<float>& sample) const {
+    auto sample_scaled = scaleInputs(sample);
     const std::size_t k = groups_.size();
     std::vector<std::size_t> vote(k);
 
@@ -172,7 +174,7 @@ float SVMClassification::predict(const std::vector<float>& sample) const {
         std::size_t SV_index = 0;
         for (auto idx : groups_.at(labels_[i])) {
             if (nonzero_[idx]) {
-                k_values[i].push_back((*kernel_)(sample, SV_.at(i)[SV_index++]));
+                k_values[i].push_back((*kernel_)(sample_scaled, SV_.at(i)[SV_index++]));
             }
         }
     }
@@ -183,11 +185,19 @@ float SVMClassification::predict(const std::vector<float>& sample) const {
             float sum = 0.0f;
             auto& group_j = groups_.at(labels_[j]);
             auto& curr_coeffs = SV_coeff_.at(i * k + j);
-            for (std::size_t idx_i = 0; idx_i < group_i.size(); ++idx_i) {
-                sum += curr_coeffs[idx_i] * k_values[i][idx_i];
+            std::size_t idx_i = 0;
+            for (auto idx : group_i) {
+                if (nonzero_[idx]) {
+                    sum += curr_coeffs[idx_i] * k_values[i][idx_i];
+                    ++idx_i;
+                }
             }
-            for (std::size_t idx_j = 0; idx_j < group_j.size(); ++idx_j) {
-                sum += curr_coeffs[group_i.size() + idx_j] * k_values[j][idx_j];
+            std::size_t idx_j = 0;
+            for (auto idx : group_j) {
+                if (nonzero_[idx]) {
+                    sum += curr_coeffs[idx_i + idx_j] * k_values[j][idx_j];
+                    ++idx_j;
+                }
             }
             sum -= rho_[rho_index++];
             if (sum > 0.0f) {
@@ -198,12 +208,12 @@ float SVMClassification::predict(const std::vector<float>& sample) const {
         }
     }
     auto vote_max_index = std::distance(vote.begin(), std::ranges::max_element(vote));
-    return static_cast<float>(vote_max_index);
+    return static_cast<float>(labels_[vote_max_index]);
 }
 
 class SVMCSVC final : public SVMClassification {
 public:
-    SVMCSVC(const std::shared_ptr<Kernel>& kernel) : SVMClassification(kernel) {}
+    SVMCSVC(std::unique_ptr<Kernel> kernel) : SVMClassification(std::move(kernel)) {}
 
     std::pair<std::vector<float>, float> fitOne(const SVMTrainData& svm_data, const SVMParams& params,
                                                 float Cp, float Cn);
@@ -238,7 +248,7 @@ std::pair<std::vector<float>, float> SVMCSVC::fitOne(const SVMTrainData& svm_dat
 
 class SVMNuSVC final : public SVMClassification {
 public:
-    SVMNuSVC(const std::shared_ptr<Kernel>& kernel, const SVMParams& params) : SVMClassification(kernel) {}
+    SVMNuSVC(std::unique_ptr<Kernel> kernel, const SVMParams& params) : SVMClassification(std::move(kernel)) {}
     std::pair<std::vector<float>, float> fitOne(const SVMTrainData& svm_data, const SVMParams& params,
                                                 float Cp, float Cn);
 };
